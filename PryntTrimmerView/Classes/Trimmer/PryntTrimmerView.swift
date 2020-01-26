@@ -8,10 +8,14 @@
 
 import AVFoundation
 import UIKit
-
+public enum TrimmerViewDirection{
+    case right
+    case left
+    case unknown
+}
 public protocol TrimmerViewDelegate: class {
     func didChangePositionBar(_ playerTime: CMTime)
-    func positionBarStoppedMoving(_ playerTime: CMTime)
+    func positionBarStoppedMoving(_ playerTime: CMTime,direction: TrimmerViewDirection)
 }
 
 /// A view to select a specific time range of a video. It consists of an asset preview with thumbnails inside a scroll view, two
@@ -70,6 +74,13 @@ public protocol TrimmerViewDelegate: class {
     private var positionConstraint: NSLayoutConstraint?
 
     private let handleWidth: CGFloat = 15
+
+    /// The maximum duration allowed for the trimming. Change it before setting the asset, as the asset preview
+    public var maxDuration: Double = 15 {
+        didSet {
+            assetPreview.maxDuration = maxDuration
+        }
+    }
 
     /// The minimum duration allowed for the trimming. The handles won't pan further if the minimum duration is attained.
     public var minDuration: Double = 3
@@ -216,8 +227,12 @@ public protocol TrimmerViewDelegate: class {
     // MARK: - Trim Gestures
 
     @objc func handlePanGesture(_ gestureRecognizer: UIPanGestureRecognizer) {
+        var direction:TrimmerViewDirection = .right
         guard let view = gestureRecognizer.view, let superView = gestureRecognizer.view?.superview else { return }
         let isLeftGesture = view == leftHandleView
+        if isLeftGesture{
+            direction = .left
+        }
         switch gestureRecognizer.state {
 
         case .began:
@@ -226,7 +241,7 @@ public protocol TrimmerViewDelegate: class {
             } else {
                 currentRightConstraint = rightConstraint!.constant
             }
-            updateSelectedTime(stoppedMoving: false)
+            updateSelectedTime(stoppedMoving: false, direction: .unknown)
         case .changed:
             let translation = gestureRecognizer.translation(in: superView)
             if isLeftGesture {
@@ -240,10 +255,10 @@ public protocol TrimmerViewDelegate: class {
             } else if let endTime = endTime {
                 seek(to: endTime)
             }
-            updateSelectedTime(stoppedMoving: false)
+            updateSelectedTime(stoppedMoving: false,direction: .unknown)
 
         case .cancelled, .ended, .failed:
-            updateSelectedTime(stoppedMoving: true)
+            updateSelectedTime(stoppedMoving: true, direction: direction)
         default: break
         }
     }
@@ -300,12 +315,12 @@ public protocol TrimmerViewDelegate: class {
         return getTime(from: endPosition)
     }
 
-    private func updateSelectedTime(stoppedMoving: Bool) {
+    private func updateSelectedTime(stoppedMoving: Bool, direction: TrimmerViewDirection) {
         guard let playerTime = positionBarTime else {
             return
         }
         if stoppedMoving {
-            delegate?.positionBarStoppedMoving(playerTime)
+            delegate?.positionBarStoppedMoving(playerTime, direction: direction)
         } else {
             delegate?.didChangePositionBar(playerTime)
         }
@@ -324,15 +339,16 @@ public protocol TrimmerViewDelegate: class {
     // MARK: - Scroll View Delegate
 
     public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        updateSelectedTime(stoppedMoving: true)
+        updateSelectedTime(stoppedMoving: true, direction: .unknown)
     }
 
     public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if !decelerate {
-            updateSelectedTime(stoppedMoving: true)
+            updateSelectedTime(stoppedMoving: true, direction: .unknown)
         }
     }
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        updateSelectedTime(stoppedMoving: false)
+        updateSelectedTime(stoppedMoving: false, direction: .unknown)
     }
 }
+
